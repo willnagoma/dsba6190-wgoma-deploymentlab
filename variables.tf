@@ -11,7 +11,7 @@ variable "tag_instructor" {
 
 variable "tag_semester" {
   type    = string
-  default = "fall2025"
+  default = "fall25"
 }
 
 variable "location" {
