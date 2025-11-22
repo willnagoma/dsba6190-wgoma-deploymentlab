@@ -1,4 +1,6 @@
+// -----------------------------------------------------------------------------
 // Tags
+// -----------------------------------------------------------------------------
 locals {
   tags = {
     class      = var.tag_class
@@ -10,7 +12,6 @@ locals {
 // -----------------------------------------------------------------------------
 // Random suffix for unique names
 // -----------------------------------------------------------------------------
-
 resource "random_integer" "deployment_id_suffix" {
   min = 100
   max = 999
@@ -19,7 +20,6 @@ resource "random_integer" "deployment_id_suffix" {
 // -----------------------------------------------------------------------------
 // Resource Group
 // -----------------------------------------------------------------------------
-
 resource "azurerm_resource_group" "rg" {
   name     = "rg-${var.class_name}-${var.student_name}-${var.environment}-${var.location}-${random_integer.deployment_id_suffix.result}"
   location = var.location
@@ -30,7 +30,6 @@ resource "azurerm_resource_group" "rg" {
 // -----------------------------------------------------------------------------
 // Virtual Network & Subnet
 // -----------------------------------------------------------------------------
-
 resource "azurerm_virtual_network" "vnet" {
   name                = "vnet-${var.class_name}-${var.student_name}-${var.environment}-${var.location}-${random_integer.deployment_id_suffix.result}"
   location            = azurerm_resource_group.rg.location
@@ -56,7 +55,6 @@ resource "azurerm_subnet" "subnet" {
 // -----------------------------------------------------------------------------
 // Storage Account (inside the VNet)
 // -----------------------------------------------------------------------------
-
 resource "azurerm_storage_account" "storage" {
   name                     = "sto${var.class_name}${var.student_name}${var.environment}${random_integer.deployment_id_suffix.result}"
   resource_group_name      = azurerm_resource_group.rg.name
@@ -64,7 +62,7 @@ resource "azurerm_storage_account" "storage" {
   account_tier             = "Standard"
   account_replication_type = "LRS"
 
-  // Turn on hierarchical namespace (Data Lake Gen2) per lab instructions
+  // Turn on hierarchical namespace (Data Lake Gen2)
   is_hns_enabled = true
 
   tags = local.tags
@@ -83,41 +81,34 @@ resource "azurerm_storage_account_network_rules" "storage_rules" {
   ]
 
   // Example public IP address that can still reach the storage account
-  // (Colby used 100.0.0.1 as a placeholder in class – you can update to your real IP if you want)
   ip_rules = ["100.0.0.1"]
 }
 
 // -----------------------------------------------------------------------------
-// SQL Server & Database
+// SQL Server & Database (corrected for new MSSQL provider)
 // -----------------------------------------------------------------------------
-
-resource "azurerm_sql_server" "sql" {
+resource "azurerm_mssql_server" "sql" {
   name                         = "sql-${var.class_name}-${var.student_name}-${var.environment}-${random_integer.deployment_id_suffix.result}"
   resource_group_name          = azurerm_resource_group.rg.name
   location                     = azurerm_resource_group.rg.location
   version                      = "12.0"
   administrator_login          = "sqladminuser"
-  administrator_login_password = "Password1234!" // ok for a lab; not for real prod
+  administrator_login_password = "Password1234!"
 
   tags = local.tags
 }
 
-resource "azurerm_sql_database" "sqldb" {
-  name                = "db-${var.class_name}-${var.student_name}-${var.environment}-${random_integer.deployment_id_suffix.result}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  server_name         = azurerm_sql_server.sql.name
-
-  // Lab says "Basic or Standard" – pick a cheap tier
-  sku_name = "Basic"
+resource "azurerm_mssql_database" "sqldb" {
+  name      = "db-${var.class_name}-${var.student_name}-${var.environment}-${random_integer.deployment_id_suffix.result}"
+  server_id = azurerm_mssql_server.sql.id
+  sku_name  = "Basic"
 
   tags = local.tags
 }
 
 // Restrict SQL access to the VNet/subnet (no open public access)
-resource "azurerm_sql_virtual_network_rule" "sql_vnet_rule" {
-  name                = "sql-vnet-rule"
-  resource_group_name = azurerm_resource_group.rg.name
-  server_name         = azurerm_sql_server.sql.name
-  subnet_id           = azurerm_subnet.subnet.id
+resource "azurerm_mssql_virtual_network_rule" "sql_vnet_rule" {
+  name      = "sql-vnet-rule"
+  server_id = azurerm_mssql_server.sql.id
+  subnet_id = azurerm_subnet.subnet.id
 }
